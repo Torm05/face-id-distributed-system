@@ -27,20 +27,29 @@ void setup() {
 
   Serial.println("======================================");
   Serial.println("Puente listo");
+  Serial.println("Escribe 'REG' en el monitor serie para registrar un rostro");
   Serial.println("======================================");
 }
 
 void loop() {
   
-  // Cámara
+  // ── NUEVO: Enviar comandos de PC a Cámara ──────────────
+  if (Serial.available() > 0) {
+    String comandoPC = Serial.readStringUntil('\n');
+    comandoPC.trim();
+    if (comandoPC.length() > 0) {
+      wonderMV.print(comandoPC); 
+      Serial.println("[PC -> Cámara] Comando enviado: " + comandoPC);
+    }
+  }
+
+  // ── Cámara -> ESP32 / PC ────────────────────────────────
   // AltSoftSerial captura esto automáticamente sin estorbar.
   if (wonderMV.available() > 0) {
     char c = (char)wonderMV.read();
     bufferWonderMV += c;
-    
     if (c == '\n') {
       bufferWonderMV.trim();
-      
       if (!bufferWonderMV.equals("ID:-1") && bufferWonderMV.startsWith("ID:")) {
         esp32Serial.println(bufferWonderMV); 
         Serial.println("[Cámara] Reenviado a ESP32: " + bufferWonderMV);
@@ -49,10 +58,9 @@ void loop() {
     }
   }
 
-  // Bluetooth
+  // ── Bluetooth -> ESP32 ──────────────────────────────────
   if (bluetooth.available() > 0) {
     char state = bluetooth.read();
-    
     // Solo entramos a evaluar si el caracter NO es un salto de línea ni retorno de carro
     if (state != '\n' && state != '\r') {
       

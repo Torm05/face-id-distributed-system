@@ -98,18 +98,8 @@ ld5_kpu.load_kmodel("/sd/KPU/face_recognization/ld5.kmodel")
 fea_kpu = KPU()
 fea_kpu.load_kmodel("/sd/KPU/face_recognization/feature_extraction.kmodel")
 
-# ── Boton K1 para registrar rostros ────────────────────────────────────────
+# ── Bandera para registrar rostros ─────────────────────────────────────────
 start_processing = False
-BOUNCE_PROTECTION = 50
-fm.register(26, fm.fpioa.GPIOHS0)
-key_gpio = GPIO(GPIO.GPIOHS0, GPIO.IN)
-
-def set_key_state(*_):
-    global start_processing
-    start_processing = True
-    time.sleep_ms(BOUNCE_PROTECTION)
-
-key_gpio.irq(set_key_state, GPIO.IRQ_RISING, GPIO.WAKEUP_NOT_SUPPORT)
 
 # ── Cargar rostros persistidos desde SD ────────────────────────────────────
 inicializar_directorio()
@@ -154,6 +144,14 @@ try:
     while True:
         gc.collect()
         clock.tick()
+
+        # ───────── Escuchar comandos por UART ───────────────────────────────
+        if uart.any():
+            comando = uart.read()
+            if comando and b'REG' in comando:
+                start_processing = True
+                print("[CMD] Solicitud de registro recibida por UART")
+
         img = sensor.snapshot()
 
         kpu.run_with_output(img)
@@ -219,7 +217,7 @@ try:
                                     color=(255, 255, 0), scale=1.5)
                     enviar_id(0)
 
-                # ── Registrar rostro con K1 ─────────────────────────────────
+                # ── Registrar rostro mediante Comando UART ──────────────────
                 if start_processing:
                     record_ftrs.append(feature)
                     nuevo_id = len(record_ftrs)
@@ -247,7 +245,7 @@ try:
                         "{:.1f}fps".format(fps),
                         color=(0, 60, 255), scale=2.0)
         img.draw_string(0, 215,
-                        "K1=registrar  IDs:{} ".format(len(record_ftrs)),
+                        "CMD: REG  IDs:{} ".format(len(record_ftrs)),
                         color=(255, 100, 0), scale=1.5)
         lcd.display(img)
 
