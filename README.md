@@ -2,7 +2,7 @@
 
 ## Descripción del Proyecto
 
-Este repositorio contiene la implementación de un sistema de **reconocimiento facial distribuido**. El flujo de trabajo integra visión artificial, comunicación serial y control remoto mediante los siguientes componentes:
+Este repositorio contiene la implementación de un sistema de reconocimiento facial distribuido. El flujo de trabajo integra visión artificial, comunicación serial y control remoto mediante los siguientes componentes:
 
 - **WonderMV:** Encargado del procesamiento de imagen y reconocimiento facial de alta precisión.
 - **Arduino UNO (Bridge):** Actúa como nodo central de comunicación (Puente Serial), gestionando el flujo de datos entre la cámara y el servidor.
