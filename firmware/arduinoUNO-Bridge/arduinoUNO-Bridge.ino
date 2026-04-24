@@ -1,39 +1,38 @@
 #include <SoftwareSerial.h>
 #include <AltSoftSerial.h>
 
-// ── PINES FIJOS DE ALTSOFTSERIAL (Hardware Timer) ──
-// ¡No se declaran los pines aquí porque la librería exige RX=8 y TX=9!
 AltSoftSerial wonderMV; 
-
-// ── PINES DE SOFTWARE SERIAL ──
-SoftwareSerial bluetooth(10, 11); // RX=10, TX=11 <- HC-05
-SoftwareSerial esp32Serial(5, 4); // RX=5, TX=4   <- ESP32
+SoftwareSerial bluetooth(10, 11); 
+SoftwareSerial esp32Serial(5, 4); 
 
 int ledPin = 13; 
 String bufferWonderMV = "";
 
 void setup() {
   pinMode(ledPin, OUTPUT);
-  digitalWrite(ledPin, HIGH); // Estado inicial encendido (permitido)
+  digitalWrite(ledPin, HIGH);
 
   Serial.begin(9600);
   wonderMV.begin(9600);
   bluetooth.begin(9600);
   esp32Serial.begin(9600);
   
-  // Como AltSoftSerial es independiente, dejamos el oído 
-  // de SoftwareSerial pegado al Bluetooth permanentemente.
   bluetooth.listen();
-
   Serial.println("======================================");
-  Serial.println("Puente listo");
+  Serial.println("Router Bidireccional Adaptativo Listo");
   Serial.println("======================================");
 }
 
 void loop() {
   
-  // Cámara
-  // AltSoftSerial captura esto automáticamente sin estorbar.
+  // ── PC -> Cámara ──────────────────────────────────────────
+  if (Serial.available() > 0) {
+    String comandoPC = Serial.readStringUntil('\n');
+    comandoPC.trim();
+    if (comandoPC.length() > 0) wonderMV.println(comandoPC); 
+  }
+
+  // ── Cámara -> ESP32 / PC / App Android ────────────────────
   if (wonderMV.available() > 0) {
     char c = (char)wonderMV.read();
     bufferWonderMV += c;
@@ -41,32 +40,63 @@ void loop() {
     if (c == '\n') {
       bufferWonderMV.trim();
       
-      if (!bufferWonderMV.equals("ID:-1") && bufferWonderMV.startsWith("ID:")) {
-        esp32Serial.println(bufferWonderMV); 
-        Serial.println("[Cámara] Reenviado a ESP32: " + bufferWonderMV);
+      if (bufferWonderMV.startsWith("LOG:")) {
+        Serial.println("[K210/CAM] " + bufferWonderMV.substring(4));
+      } 
+      else if (bufferWonderMV.length() > 0) {
+        long codigoNum = bufferWonderMV.toInt();
+        
+        if (codigoNum < 1000) {
+          if (codigoNum != -1) { 
+            esp32Serial.println(codigoNum); 
+            Serial.println("[Cámara -> ESP32] Dato: " + String(codigoNum)); 
+          }
+        } 
+        else {
+          bluetooth.println(codigoNum);
+          Serial.println("[Cámara -> BT App] Confirmación: " + String(codigoNum));
+        }
       }
-      bufferWonderMV = ""; // Limpiamos para el próximo rostro
+      bufferWonderMV = "";
     }
   }
 
-  // Bluetooth
+  // ── App Android (Bluetooth) -> Cámara / ESP32 ─────────────
   if (bluetooth.available() > 0) {
-    char state = bluetooth.read();
+    String comandoBT = "";
     
-    // Solo entramos a evaluar si el caracter NO es un salto de línea ni retorno de carro
-    if (state != '\n' && state != '\r') {
+    // Lectura por ráfaga: Leemos todo lo que haya llegado al buffer
+    while (bluetooth.available() > 0) {
+      char b = (char)bluetooth.read();
+      // Ignoramos basura residual por si el de Android alguna vez manda saltos
+      if (b != '\n' && b != '\r') {
+        comandoBT += b;
+      }
+      // Pequeña pausa para permitir que el siguiente byte llegue a 9600 baudios
+      delay(5); 
+    }
+    
+    comandoBT.trim();
+    
+    if (comandoBT.length() > 0) {
+      long cmdBT = comandoBT.toInt();
       
-      if (state == '0') {
+      // ── TRADUCTOR DE BLUETOOTH A ESP32 ──
+      if (cmdBT == 0) {
         digitalWrite(ledPin, LOW);
-        Serial.println("Telegram APAGAR [0]: LED OFF (Sistema Bloqueado)");
-        esp32Serial.println("0"); 
+        esp32Serial.println("-10"); // Traducimos a Bloqueo
+        Serial.println("[BT -> ESP32] Comando 0 (Traducido a -10: Bloqueo)");
       }
-      else if (state == '1') {
+      else if (cmdBT == 1) {
         digitalWrite(ledPin, HIGH);
-        Serial.println("Telegram ENCENDER [1]: LED ON (Sistema Desbloqueado)");
-        esp32Serial.println("1"); 
+        esp32Serial.println("-11"); // Traducimos a Desbloqueo
+        Serial.println("[BT -> ESP32] Comando 1 (Traducido a -11: Desbloqueo)");
       }
-      
+      // Códigos >= 1000 (Gestión de rostros) van a la cámara
+      else {
+        wonderMV.println(cmdBT);
+        Serial.println("[BT -> Cámara] Comando ruteado: " + String(cmdBT));
+      }
     }
   }
 }
