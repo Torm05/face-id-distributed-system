@@ -8,7 +8,7 @@ Resultados de inferencia enviados continuamente por la cámara para determinar e
 | :--- | :--- | :--- |
 | `-1` | Sin Rostro | Ignorar. No hay nadie frente a la cámara. |
 | `0` | Desconocido | Acceso denegado. Rostro detectado pero no registrado. |
-| `1` a `999` | Autorizado | Acceso permitido. El número es el `ID` del usuario reconocido. Se envía petición HTTP al servidor. |
+| `1` a `255` | Autorizado | Acceso permitido. El número es el `ID` del usuario reconocido. Se envía petición HTTP al servidor. |
 
 ---
 
