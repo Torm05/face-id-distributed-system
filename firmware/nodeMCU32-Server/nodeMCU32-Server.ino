@@ -5,11 +5,9 @@
 #include <HardwareSerial.h>
 #include <WiFiClientSecure.h>
 
-// ── Pines ────────────────────────────────────────
 const int MySerialRX = 16; 
 const int MySerialTX = 17;
 
-// ── Objetos globales ─────────────────────────────
 HardwareSerial MySerial(1);
 WiFiMulti wifiMulti;
 String serverIP = "192.168.1.100"; 
@@ -18,10 +16,8 @@ String bufferSerial = "";
 char SENSOR_ACTIVO = '1';
 int contador = 0;
 
-// ── Prototipos ───────────────────────────────────
-void procesarMensaje(String msg);
+void procesarMensaje(int valorIngresado);
 
-// ────────────────────────────────────────────────
 void setup() {
   MySerial.begin(9600, SERIAL_8N1, MySerialRX, MySerialTX);
   Serial.begin(9600);
@@ -31,22 +27,12 @@ void setup() {
   wifiMulti.addAP("UAS/ESTUDIANTES", "");
   wifiMulti.addAP("Galaxy Yoyo", "dddr8057");
 
-  Serial.println("[ESP32] Iniciando...");
-  Serial.println("[ESP32] Esperando conexion WiFi...");
-
-  // Esperar WiFi antes de continuar
-  while (wifiMulti.run() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println();
-  Serial.println("[WiFi] Conectado: " + WiFi.localIP().toString());
-  Serial.println("[Config] Escribe la IP del servidor y presiona Enter");
+  Serial.println("[ESP32] Iniciando y esperando WiFi...");
+  while (wifiMulti.run() != WL_CONNECTED) { delay(500); Serial.print("."); }
+  Serial.println("\n[WiFi] Conectado: " + WiFi.localIP().toString());
 }
 
-// ────────────────────────────────────────────────
 void loop() {
-  // Actualizar IP desde Serial Monitor
   if (Serial.available() > 0) {
     String nuevaIP = Serial.readStringUntil('\n');
     nuevaIP.trim();
@@ -56,84 +42,77 @@ void loop() {
     }
   }
 
-  // Leer mensajes que llegan desde el Arduino
   while (MySerial.available() > 0) {
     char c = (char)MySerial.read();
     bufferSerial += c;
     if (c == '\n') {
       bufferSerial.trim();
       if (bufferSerial.length() > 0) {
-        procesarMensaje(bufferSerial);
+        int datoNumerico = bufferSerial.toInt();
+        procesarMensaje(datoNumerico);
       }
       bufferSerial = "";
     }
   }
 }
 
-// ────────────────────────────────────────────────
-void procesarMensaje(String msg) {
-  if (msg == "0" || msg == "1") {
-    SENSOR_ACTIVO = msg.charAt(0);
-    Serial.println("[Estado] Recibido desde Arduino: " + String(SENSOR_ACTIVO));
+void procesarMensaje(int msgVal) {
+  
+  // ── 1. Comandos de Bloqueo/Desbloqueo (Desde App/Telegram) ────────
+  if (msgVal == -10) {
+    SENSOR_ACTIVO = '0';
+    Serial.println("[Estado] Sistema Bloqueado desde Telegram");
   }
-  else if (msg.startsWith("ID:")) {
-    int faceId = msg.substring(3).toInt();
+  else if (msgVal == -11) {
+    SENSOR_ACTIVO = '1';
+    Serial.println("[Estado] Sistema Desbloqueado desde Telegram");
+  }
+  
+  // ── 2. Recepción de un Rostro Reconocido (ID 1 al 999) ─────────────
+  else if (msgVal > 0 && msgVal < 1000) {
     
     if( SENSOR_ACTIVO == '1' ){
-      
-      Serial.print("[Cámara] ID detectado: ");
-      Serial.println(faceId);
+      Serial.print("[Cámara] ID Detectado: ");
+      Serial.println(msgVal);
 
-      if ( (wifiMulti.run() == WL_CONNECTED)) {
-
+      if (wifiMulti.run() == WL_CONNECTED) {
         WiFiClientSecure client;
-        client.setInsecure(); // Evita validación del certificado SSL
-        
+        client.setInsecure(); 
         HTTPClient http;
         String url = "https://sia-1-xipe.onrender.com/accesos";
 
-        Serial.print("[HTTP] begin...\n");
         if (http.begin(client, url)) { 
-
-          Serial.print("[HTTP] POST...\n");
           http.addHeader("Content-Type", "application/json");
           http.addHeader("x-api-key", "12345sia");
 
           char cdata[64];
-          sprintf(cdata, "{\"id_usuario\":%d}", faceId);
-
+          sprintf(cdata, "{\"id_usuario\":\"%d\"}", msgVal);
           int httpCode = http.POST(cdata);
           
           if (httpCode > 0) {
-            Serial.printf("[HTTP] POST... code: %d\n", httpCode);
-            
             if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_MOVED_PERMANENTLY) {
-              String payload = http.getString();
-              Serial.println(payload);
-
-              contador = contador + 1;
-            } 
-            else if (httpCode == 403) {
-              Serial.println("[HTTP] Error 403: No Autorizado (Verifica tu API Key)");
-            } 
-            else {
-              Serial.printf("[HTTP] Respuesta inesperada del servidor: %s\n", http.getString().c_str());
+              Serial.println(http.getString());
+              contador++;
+            } else if (httpCode == 403) {
+              Serial.println("[HTTP] Error 403: No Autorizado");
+            } else {
+              Serial.printf("[HTTP] Respuesta servidor: %s\n", http.getString().c_str());
             }
           } else {
-            // Si el código es menor a 0, hubo un fallo de conexión física
-            Serial.printf("[HTTP] POST... failed, error: %s\n", http.errorToString(httpCode).c_str());
+            Serial.printf("[HTTP] Fallo de red: %s\n", http.errorToString(httpCode).c_str());
           }
-
           http.end();
-        } else {
-          Serial.println("[HTTP] Unable to connect");
         }
       }
-
-      delay(5000);
+      delay(5000); // Cooldown entre envíos HTTP
     } 
     else {
-      Serial.println("[Seguridad] ID bloqueado en el ESP32. Sistema inactivo.");
+      Serial.println("[Seguridad] ID rechazado. Sistema bloqueado.");
     }
+  }
+  
+  // ── 3. Recepción de Rostro Desconocido (0) ────────────────────────
+  else if (msgVal == 0) {
+     // Lógica para rechazar el acceso a desconocidos
   }
 }
