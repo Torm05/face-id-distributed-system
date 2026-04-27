@@ -104,7 +104,6 @@ void procesarMensaje(int msgVal) {
           http.end();
         }
       }
-      // Ten cuidado con este delay, bloquea todo el ESP32 por 5 segundos
       delay(5000); 
     } 
     else {
