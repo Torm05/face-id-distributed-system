@@ -3,12 +3,12 @@
 #include <WiFiMulti.h>
 #include <HTTPClient.h>
 #include <HardwareSerial.h>
-#include <WiFiClientSecure.h>
+#include <WiFiClient.h>
 
-const int MySerialRX = 16; 
-const int MySerialTX = 17;
+const int ArduinoRX = 16; 
+const int ArduinoTX = 17;
 
-HardwareSerial MySerial(1);
+HardwareSerial arduino(1);
 WiFiMulti wifiMulti;
 String serverIP = "192.168.1.100"; 
 String bufferSerial = ""; 
@@ -19,7 +19,7 @@ int contador = 0;
 void procesarMensaje(int valorIngresado);
 
 void setup() {
-  MySerial.begin(9600, SERIAL_8N1, MySerialRX, MySerialTX);
+  arduino.begin(9600, SERIAL_8N1, ArduinoRX, ArduinoTX);
   Serial.begin(9600);
 
   wifiMulti.addAP("INFINITUM98A4_2.4", "ftD5f8CE2m");
@@ -28,7 +28,11 @@ void setup() {
   wifiMulti.addAP("Galaxy Yoyo", "dddr8057");
 
   Serial.println("[ESP32] Iniciando y esperando WiFi...");
-  while (wifiMulti.run() != WL_CONNECTED) { delay(500); Serial.print("."); }
+
+  while (wifiMulti.run() != WL_CONNECTED) { 
+    delay(500); 
+    Serial.print("."); 
+    }
   Serial.println("\n[WiFi] Conectado: " + WiFi.localIP().toString());
 }
 
@@ -42,8 +46,8 @@ void loop() {
     }
   }
 
-  while (MySerial.available() > 0) {
-    char c = (char)MySerial.read();
+  while (arduino.available() > 0) {
+    char c = (char)arduino.read();
     bufferSerial += c;
     if (c == '\n') {
       bufferSerial.trim();
@@ -58,61 +62,53 @@ void loop() {
 
 void procesarMensaje(int msgVal) {
   
-  // ── 1. Comandos de Bloqueo/Desbloqueo (Desde App/Telegram) ────────
+  // Comandos de Bloqueo/Desbloqueo
   if (msgVal == -10) {
     SENSOR_ACTIVO = '0';
-    Serial.println("[Estado] Sistema Bloqueado desde Telegram");
+    Serial.println("[Estado] Sistema Bloqueado");
   }
   else if (msgVal == -11) {
     SENSOR_ACTIVO = '1';
-    Serial.println("[Estado] Sistema Desbloqueado desde Telegram");
+    Serial.println("[Estado] Sistema Desbloqueado");
   }
   
-  // ── 2. Recepción de un Rostro Reconocido (ID 1 al 999) ─────────────
+  // Recepción de ID de Rostro
   else if (msgVal > 0 && msgVal < 1000) {
     
     if( SENSOR_ACTIVO == '1' ){
-      Serial.print("[Cámara] ID Detectado: ");
+      Serial.print("[Cámara] Enviando ID: ");
       Serial.println(msgVal);
 
       if (wifiMulti.run() == WL_CONNECTED) {
-        WiFiClientSecure client;
-        client.setInsecure(); 
+        WiFiClient client;
         HTTPClient http;
-        String url = "https://sia-1-xipe.onrender.com/accesos";
+
+        String url = "http://" + serverIP + ":3010/accesos";
 
         if (http.begin(client, url)) { 
           http.addHeader("Content-Type", "application/json");
-          http.addHeader("x-api-key", "12345sia");
 
           char cdata[64];
           sprintf(cdata, "{\"id_usuario\":\"%d\"}", msgVal);
+
           int httpCode = http.POST(cdata);
           
           if (httpCode > 0) {
-            if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_MOVED_PERMANENTLY) {
-              Serial.println(http.getString());
+            if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_CREATED) {
+              Serial.println("[HTTP] Éxito: " + http.getString());
               contador++;
-            } else if (httpCode == 403) {
-              Serial.println("[HTTP] Error 403: No Autorizado");
             } else {
-              Serial.printf("[HTTP] Respuesta servidor: %s\n", http.getString().c_str());
-            }
-          } else {
+              Serial.printf("[HTTP] Respuesta servidor: %d - %s\n", httpCode, http.getString().c_str());
+            } else {
             Serial.printf("[HTTP] Fallo de red: %s\n", http.errorToString(httpCode).c_str());
           }
           http.end();
         }
       }
-      delay(5000); // Cooldown entre envíos HTTP
+      delay(5000);
     } 
     else {
       Serial.println("[Seguridad] ID rechazado. Sistema bloqueado.");
     }
-  }
-  
-  // ── 3. Recepción de Rostro Desconocido (0) ────────────────────────
-  else if (msgVal == 0) {
-     // Lógica para rechazar el acceso a desconocidos
   }
 }
