@@ -61,7 +61,6 @@ void loop() {
 }
 
 void procesarMensaje(int msgVal) {
-  
   // Comandos de Bloqueo/Desbloqueo
   if (msgVal == -10) {
     SENSOR_ACTIVO = '0';
@@ -74,22 +73,21 @@ void procesarMensaje(int msgVal) {
   
   // Recepción de ID de Rostro
   else if (msgVal > 0 && msgVal < 1000) {
-    
-    if( SENSOR_ACTIVO == '1' ){
+    if (SENSOR_ACTIVO == '1') {
       Serial.print("[Cámara] Enviando ID: ");
       Serial.println(msgVal);
 
       if (wifiMulti.run() == WL_CONNECTED) {
         WiFiClient client;
         HTTPClient http;
-
         String url = "http://" + serverIP + ":3010/accesos";
 
         if (http.begin(client, url)) { 
           http.addHeader("Content-Type", "application/json");
 
           char cdata[64];
-          sprintf(cdata, "{\"id_usuario\":\"%d\"}", msgVal);
+          // Enviando como JSON: {"id_usuario": 123}
+          sprintf(cdata, "{\"id_usuario\":%d}", msgVal); 
 
           int httpCode = http.POST(cdata);
           
@@ -98,14 +96,16 @@ void procesarMensaje(int msgVal) {
               Serial.println("[HTTP] Éxito: " + http.getString());
               contador++;
             } else {
-              Serial.printf("[HTTP] Respuesta servidor: %d - %s\n", httpCode, http.getString().c_str());
-            } else {
+              Serial.printf("[HTTP] Error del Servidor: %d - %s\n", httpCode, http.getString().c_str());
+            }
+          } else {
             Serial.printf("[HTTP] Fallo de red: %s\n", http.errorToString(httpCode).c_str());
           }
           http.end();
         }
       }
-      delay(5000);
+      // Ten cuidado con este delay, bloquea todo el ESP32 por 5 segundos
+      delay(5000); 
     } 
     else {
       Serial.println("[Seguridad] ID rechazado. Sistema bloqueado.");
