@@ -136,7 +136,7 @@ try:
         clock.tick()
         ahora = time.ticks_ms()
 
-        # ── INTERPRETE DE COMANDOS UART ───────────────────────────────────────────
+        # ── Interprete de comandos UART ───────────────────────────────────────────
         if uart.any():
             comando_bytes = uart.read()
             if comando_bytes:
