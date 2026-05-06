@@ -99,7 +99,8 @@ void procesarMensaje(int msgVal) {
               contador++;
             } else {
               Serial.printf("[HTTP] Respuesta servidor: %d - %s\n", httpCode, http.getString().c_str());
-            } else {
+            } 
+          } else {
             Serial.printf("[HTTP] Fallo de red: %s\n", http.errorToString(httpCode).c_str());
           }
           http.end();
